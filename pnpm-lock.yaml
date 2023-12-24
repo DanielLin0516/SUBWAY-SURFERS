@@ -5,6 +5,7 @@ specifiers:
   '@types/dat.gui': ^0.7.10
   '@types/events': ^3.0.0
   '@types/node': ^18.19.3
+  '@types/stats.js': ^0.17.3
   '@types/three': ^0.155.0
   '@vitejs/plugin-vue': ^4.5.2
   '@vue/tsconfig': ^0.5.0
@@ -35,6 +36,7 @@ devDependencies:
   '@types/dat.gui': registry.npmmirror.com/@types/dat.gui/0.7.12
   '@types/events': registry.npmmirror.com/@types/events/3.0.3
   '@types/node': registry.npmmirror.com/@types/node/18.19.3
+  '@types/stats.js': registry.npmmirror.com/@types/stats.js/0.17.3
   '@types/three': registry.npmmirror.com/@types/three/0.155.1
   '@vitejs/plugin-vue': registry.npmmirror.com/@vitejs/plugin-vue/4.5.2_vite@5.0.10+vue@3.3.13
   '@vue/tsconfig': registry.npmmirror.com/@vue/tsconfig/0.5.1
