@@ -42,6 +42,7 @@ export default class Environment {
     startGame() {
         this.plane = [];
         this.obstacal = [];
+        this.z = -1 * (roadLength / 2) + 10;
         this.coin = [];
         this.setAmbientLight();
         this.setGroupScene(this.z, -5, true);
