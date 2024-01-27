@@ -236,38 +236,38 @@ export class ControlPlayer extends EventEmitter {
             }
         });
     }
-    // 左右移动控制
-    handleLeftRightMove() {
-        const targetPosition = this.targetPosition;
-        const lastPosition = this.lastPosition;
-        if (Math.abs(targetPosition - lastPosition) < 1) {
-            this.removeHandle = true;
+// 左右移动控制
+handleLeftRightMove() {
+    const targetPosition = this.targetPosition;
+    const lastPosition = this.lastPosition;
+    if (Math.abs(targetPosition - lastPosition) < 1) {
+        this.removeHandle = true;
+    }
+    if (targetPosition !== lastPosition) {
+        // removehandle处理单次碰撞
+        // 处理左右碰撞回弹效果
+        if ((this.leftCollide || this.rightCollide) && this.removeHandle) {
+            this.smallMistake += 1;
+            this.emit('collision');
+            showToast('撞到障碍物！请注意！！！');
+            this.targetPosition = this.originLocation.x;
+            this.removeHandle = false;
+            if (targetPosition > lastPosition) {
+                this.way -= 1;
+            }
+            else {
+                this.way += 1;
+            }
         }
-        if (targetPosition !== lastPosition) {
-            // removehandle处理单次碰撞
-            // 处理左右碰撞回弹效果
-            if ((this.leftCollide || this.rightCollide) && this.removeHandle) {
-                this.smallMistake += 1;
-                this.emit('collision');
-                showToast('撞到障碍物！请注意！！！');
-                this.targetPosition = this.originLocation.x;
-                this.removeHandle = false;
-                if (targetPosition > lastPosition) {
-                    this.way -= 1;
-                }
-                else {
-                    this.way += 1;
-                }
-            }
-            // 平滑移动逻辑
-            const moveSpeed = 0.15; // 移动速度
-            const diff = targetPosition - lastPosition;
-            if (Math.abs(diff) > 0.0001) {
-                this.model.position.x += diff * moveSpeed;
-                this.lastPosition += diff * moveSpeed;
-            }
+        // 平滑移动逻辑
+        const moveSpeed = 0.15; // 移动速度
+        const diff = targetPosition - lastPosition;
+        if (Math.abs(diff) > 0.0001) {
+            this.model.position.x += diff * moveSpeed;
+            this.lastPosition += diff * moveSpeed;
         }
     }
+}
     // 上下移动控制
     handleUpdownMove() {
     }
@@ -499,7 +499,7 @@ export class ControlPlayer extends EventEmitter {
                 this.game.emit('gameStatus', this.gameStatus);
             }
             else {
-                this.fallingSpeed += 0.2;
+                this.fallingSpeed += 0.4;
                 this.model.position.y += obstacal * (1 - locateObstacal);
                 this.smallMistake += 1;
                 this.emit('collision');
