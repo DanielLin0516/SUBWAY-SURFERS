@@ -1,40 +1,24 @@
 # SUBWAY-SURFERS
 
-This template should help get you started developing with Vue 3 in Vite.
+English ｜ [中文](https://github.com/DanielLin0516/SUBWAY-SURFERS/blob/master/README_ZH.md)
 
-## Recommended IDE Setup
+SUBWAY-SURFERS made with Three.js
 
-[VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur) + [TypeScript Vue Plugin (Volar)](https://marketplace.visualstudio.com/items?itemName=Vue.vscode-typescript-vue-plugin).
+You can play the game online [here](https://subway-surfers-threejs.vercel.app/).
 
-## Type Support for `.vue` Imports in TS
+![preview](https://p1-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/ad12e20759924eefaefdbfbedfdc76b5~tplv-k3u1fbpfcp-jj-mark:0:0:0:0:q75.image#?w=804&h=1024&s=12141403&e=gif&f=68&b=7b7368)
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [TypeScript Vue Plugin (Volar)](https://marketplace.visualstudio.com/items?itemName=Vue.vscode-typescript-vue-plugin) to make the TypeScript language service aware of `.vue` types.
+## Features:
 
-If the standalone TypeScript plugin doesn't feel fast enough to you, Volar has also implemented a [Take Over Mode](https://github.com/johnsoncodehk/volar/discussions/471#discussioncomment-1361669) that is more performant. You can enable it by the following steps:
+- Infinite map
+- Collision front and rear
+- Game rating
+- Support PC trial play
+- Restart game
 
-1. Disable the built-in TypeScript Extension
-    1) Run `Extensions: Show Built-in Extensions` from VSCode's command palette
-    2) Find `TypeScript and JavaScript Language Features`, right click and select `Disable (Workspace)`
-2. Reload the VSCode window by running `Developer: Reload Window` from the command palette.
+## Working on:
 
-## Customize configuration
-
-See [Vite Configuration Reference](https://vitejs.dev/config/).
-
-## Project Setup
-
-```sh
-npm install
-```
-
-### Compile and Hot-Reload for Development
-
-```sh
-npm run dev
-```
-
-### Type-Check, Compile and Minify for Production
-
-```sh
-npm run build
-```
+- Irregular obstacle generation
+- Character collision detection optimization
+- More gameplay(jump shoes……)
+- ……
