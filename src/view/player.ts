@@ -73,7 +73,7 @@ export class PlayerView {
     this.menuT += dt;
     this.play('idle', 0.3);
     this.root.position.set(0, 0, 0);
-    this.root.rotation.set(0, Math.sin(this.menuT * 0.4) * 0.25 + Math.PI, 0); // face the camera on the title screen
+    this.root.rotation.set(0, Math.sin(this.menuT * 0.4) * 0.25, 0); // faces -Z, toward the title-screen camera
     this.mixer.update(dt);
   }
 
