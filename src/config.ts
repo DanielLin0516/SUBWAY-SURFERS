@@ -37,7 +37,16 @@ export const OB = {
   overhead: { halfW: 1.15, depth: 0.35, yb: 1.1, yt: 2.65, walk: false },
   train: { halfW: 1.15, depth: 6.74, yb: 0, yt: 3.4, walk: true },
   ramp: { halfW: 1.15, depth: 7, yb: 0, yt: 3.4, walk: true },
+  mtrain: { halfW: 1.15, depth: 6.74, yb: 0, yt: 3.4, walk: false },
 } as const;
+// Moving trains: position is a function of the runner's distance, not of time, so where they meet is fixed
+// when the map is made (and the path search knows it). Until the runner is TRIGGER metres from the meeting
+// point the train waits with its lights on; then it comes at RATIO x the runner's speed.
+export const MOVER = { ratio: 0.6, trigger: 70 };
+/** Front of a moving train when the runner is at d (meet = runner distance where the fronts touch). */
+export const moverFront = (meet: number, d: number) => meet + MOVER.ratio * Math.min(MOVER.trigger, meet - d);
+/** Stretch of runner distances during which a moving train of length len is beside the runner. */
+export const moverSpan = (len: number) => len / (1 + MOVER.ratio);
 export const CAR_LEN = 6.74;
 export const CAR_GAP = 0.3;
 export const trainLength = (cars: number) => cars * CAR_LEN + (cars - 1) * CAR_GAP;

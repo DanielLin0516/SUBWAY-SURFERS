@@ -36,7 +36,7 @@ await p.ev(`(() => {
     const o = T.ob(id);
     if (action === 'jump') { T.until(() => o.d0 - S.d <= 3.0); R.input('up'); }
     if (action === 'slide') { T.until(() => o.d0 - S.d <= 2.5); R.input('down'); }
-    T.passed(id);
+    if (kind === 'mtrain') T.until(() => !T.ob(id), 4); else T.passed(id);
     return T.result();
   };
 })()`);
@@ -50,6 +50,7 @@ const expect = {
   hurdle: { run: 'crash', jump: 'pass', slide: 'pass', side: 'bounce' },
   overhead: { run: 'crash', jump: 'crash', slide: 'pass', side: 'bounce' },
   train: { run: 'crash', jump: 'crash', slide: 'crash', side: 'bounce' },
+  mtrain: { run: 'crash', jump: 'crash', slide: 'crash', side: 'bounce' },
 };
 for (const kind of Object.keys(expect)) {
   for (const action of Object.keys(expect[kind])) {
@@ -98,6 +99,63 @@ check('change lane into the side of a ramp low end: fine; high end: bounce', awa
   __t.fresh(0); R.place('ramp', 1, -5); R.input('right'); R.step(0.3, 1 / 120);
   const high = S.alive && S.lane === 0 && S.sinceStumble < 50;
   return low && high;
+})()`));
+
+// ramp entries: every speed x frame time x way of getting onto it (the user hit "crashed on a ramp")
+const rampFuzz = await p.ev(`(() => {
+  const R = __run, S = R.sim, X = (l) => (l - 1) * 2.5;
+  const bad = []; let n = 0;
+  const one = (name, speed, dt, o) => {
+    n++;
+    R.start({ seed: 1, noSpawn: true, speed }); R.clear();
+    const lane = o.lane ?? 1; S.lane = lane; S.x = X(lane); S.fromX = S.x; S.laneT = 1; S.sinceStumble = 99;
+    if (o.shoes) S.power.shoes = 30;
+    const ramp = S.addOb({ kind: 'ramp', lane: 1, d0: S.d + 20, d1: S.d + 27 });
+    S.addOb({ kind: 'train', lane: 1, d0: ramp.d1, d1: ramp.d1 + 13.78, cars: 2 });
+    let acted = false, fell = false, entry = null, t = 0;
+    while (S.d < ramp.d1 + 16 && S.alive && t < 10) {
+      if (!acted && ramp.d0 - S.d <= o.at) { acted = true; entry = S.d - ramp.d0; for (const a of o.act) R.input(a); }
+      if (o.fastFall && acted && !fell && S.vy < 0 && !S.grounded) { fell = true; R.input('down'); }
+      R.step(dt, dt); t += dt;
+    }
+    const fine = S.alive && S.sinceStumble > 50;
+    // a lane change counts as "from the low end" only if it really started there (late frames move it in)
+    const mustPass = o.side ? entry !== null && entry <= 0.3 : true;
+    if (mustPass && !fine) bad.push({ name, speed, dt: +dt.toFixed(3), at: o.at, alive: S.alive });
+    if (o.side && !S.alive) bad.push({ name: name + ' crashed (side entry may bounce, never kill)', speed, dt, at: o.at });
+  };
+  for (const speed of [12, 16, 20, 24, 27]) for (const dt of [1 / 30, 1 / 60, 1 / 120, 0.1]) {
+    one('straight', speed, dt, { act: [], at: -1 });
+    for (let at = -0.4; at <= 4; at += 0.4) { one('lane in from left', speed, dt, { lane: 0, act: ['right'], at, side: true }); one('lane in from right', speed, dt, { lane: 2, act: ['left'], at, side: true }); }
+    for (let at = 0; at <= 14; at += 1) { one('jump onto it', speed, dt, { act: ['up'], at }); one('jump + fast fall', speed, dt, { act: ['up'], at, fastFall: true }); one('spring shoes', speed, dt, { act: ['up'], at, shoes: true }); }
+    for (let at = -1; at <= 3; at += 1) one('roll onto it', speed, dt, { act: ['down'], at });
+  }
+  return { cases: n, bad: bad.slice(0, 10), badCount: bad.length };
+})()`);
+check(`ramps: never a stumble or crash when entering from the low end (${rampFuzz.cases} cases: 12-27 m/s, frame 1/120-0.1 s, run/jump/fast fall/shoes/roll/lane change)`, rampFuzz.badCount === 0, rampFuzz.badCount ? rampFuzz : undefined);
+
+// moving trains: same result at every frame time; a late dodge works; meeting point does not depend on frame time
+const movers = await p.ev(`(() => {
+  const R = __run, S = R.sim, out = { crashAt: {}, dodge: {}, lights: 0 };
+  for (const dt of [1 / 30, 1 / 60, 1 / 120, 0.1]) for (const speed of [12, 20, 27]) {
+    __t.fresh(1, speed); const id = R.place('mtrain', 1, 60, 2); const meet = __t.ob(id).meet;
+    let t = 0; while (S.alive && t < 6) { R.step(dt, dt); t += dt; }
+    out.crashAt[speed + '@' + dt.toFixed(3)] = +(S.d - meet).toFixed(2);
+    __t.fresh(1, speed); const id2 = R.place('mtrain', 1, 60, 3); const m2 = __t.ob(id2).meet;
+    let acted = false; t = 0;
+    while (S.alive && t < 6 && S.d < m2 + 15) { if (!acted && m2 - S.d <= speed * 0.3) { acted = true; R.input('left'); } R.step(dt, dt); t += dt; }
+    out.dodge[speed + '@' + dt.toFixed(3)] = S.alive && S.sinceStumble > 50;
+  }
+  return out;
+})()`);
+const crashD = Object.values(movers.crashAt);
+check('moving train: run into it -> crash at the same point for every frame time and speed (within 0.35 m)', crashD.every((x) => x < 0.1 && x > -0.45) && Math.max(...crashD) - Math.min(...crashD) < 0.35, movers.crashAt);
+check('moving train: a dodge 0.3 s before meeting works at every speed and frame time', Object.values(movers.dodge).every(Boolean), movers.dodge);
+check('moving train: parked until 70 m before the meeting, then comes at 0.6x the runner speed', await p.ev(`(() => {
+  const R = __run, S = R.sim; __t.fresh(1, 20); const id = R.place('mtrain', 1, 120, 1); const o = __t.ob(id);
+  const a = o.d0; R.step(1, 1 / 120); const parked = Math.abs(o.d0 - a) < 1e-6;
+  __t.until(() => o.meet - S.d < 60); const b = o.d0; R.step(0.5, 1 / 120); const moved = b - o.d0;
+  return parked && Math.abs(moved - 0.6 * 20 * 0.5) < 0.2;
 })()`));
 
 // ---------------------------------------------------------------- forgiving edges
@@ -158,6 +216,17 @@ check('lane change takes about 0.15 s', await p.ev(`(() => {
 })()`));
 check('jump out of a roll', await p.ev(`(() => {
   const R = __run, S = R.sim; __t.fresh(1); R.input('down'); R.step(0.1, 1 / 120); R.input('up'); R.step(1 / 60, 1 / 120); return !S.sliding && S.vy > 5;
+})()`));
+
+check('lane change turns the body (yaw ~15-25 deg) and back; a reversal turns straight to the other side', await p.ev(`(() => {
+  const R = __run, S = R.sim, P = R.world.player; const yaw = () => P.model.rotation.y - Math.PI;
+  __t.fresh(1); R.input('right'); let peak = 0;
+  for (let i = 0; i < 12; i++) { R.step(1 / 120, 1 / 120); peak = Math.min(peak, yaw()); }
+  R.input('left'); let crossed = false, minAbsAfter = 9;
+  for (let i = 0; i < 30; i++) { R.step(1 / 120, 1 / 120); if (yaw() > 0.1) crossed = true; }
+  R.step(1, 1 / 60);
+  const deg = -peak * 180 / Math.PI;
+  return deg > 12 && deg < 26 && crossed && Math.abs(yaw()) < 0.02;
 })()`));
 
 // ---------------------------------------------------------------- pickups

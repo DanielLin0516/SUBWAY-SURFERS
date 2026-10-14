@@ -21,7 +21,7 @@ A swipe fires as soon as the finger has moved far enough, and one touch can swip
 ## Features
 
 - **Lane-based collision.** Each obstacle is an interval along the track, across its lane, and in height; the runner is a small box. Results are exact and repeatable. Forgiving edges: clipping a corner while leaving a lane is ignored; steering into the side of something bounces you back with a stumble (two stumbles within 4.5 s and you are caught); coming down onto a low barrier or a roof lets you stand on it.
-- **Obstacles:** low barriers (jump), hurdles (jump or roll), overhead gates (roll), trains (dodge, or run up a ramp and along the roofs).
+- **Obstacles:** low barriers (jump), hurdles (jump or roll), overhead gates (roll), trains (dodge, or run up a ramp and along the roofs), and oncoming trains with blinking headlights, a light band on the track, a horn and a growing rumble (they wait until you are 70 m from where you meet, then come at 0.6x your speed; the path search knows exactly where you meet).
 - **Feel:** fast eased lane changes (0.15 s), lane changes in the air, jump buffer (a jump pressed just before landing still happens), coyote time, fast fall, jump out of a roll, speed rising slowly from 12 to 27 m/s.
 - **Endless map** built in ~100 m chunks. Every chunk is checked with a path search before it is used, so there is always a way through; difficulty grows with distance. Coins are laid along that way.
 - **Coins, score multiplier** (rises every 800 m), **best score** and coin bank saved in localStorage.

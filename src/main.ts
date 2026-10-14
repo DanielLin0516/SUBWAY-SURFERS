@@ -9,7 +9,7 @@ import { bindInput, type Action } from './input';
 import { UI, type Screen } from './ui';
 import { t, type Key } from './i18n';
 import { load, save } from './storage';
-import { OB, trainLength, speedAt, SPEED, laneX } from './config';
+import { OB, trainLength, speedAt, SPEED, laneX, MOVER } from './config';
 import type { ObKind, PowerKind, SimEvent } from './sim/types';
 
 interface Boot {
@@ -61,6 +61,7 @@ async function main() {
   let bank = load('bank', 0);
   let state: Screen = 'start';
   let overTimer = 0;
+  const horned = new Set<number>();
 
   const resize = () => {
     const w = window.innerWidth, h = window.innerHeight;
@@ -210,6 +211,18 @@ async function main() {
     if (state !== 'start') world.player.update(sim, state === 'pause' ? 0 : dt, events);
     world.sync(sim, state === 'pause' ? 0 : dt, state === 'start');
     audio.tempo = 108 + (sim.speed - SPEED.start) * 1.6;
+    // moving trains: horn once when one is 90 m away, rumble louder as it closes in
+    let rumble = 0;
+    if (state === 'play' && sim.alive) {
+      for (const o of sim.obs) {
+        if (o.kind !== 'mtrain' || o.d1 < sim.d) continue;
+        const gap = Math.max(0, o.d0 - sim.d);
+        if (gap < 130) rumble = Math.max(rumble, 1 - gap / 130);
+        if (gap < 90 && !horned.has(o.id)) { horned.add(o.id); audio.horn(); }
+      }
+      if (horned.size > 50) horned.clear();
+    }
+    audio.rumble(rumble);
     ui.hud(Math.floor(sim.score), sim.coins, sim.mult, sim.power);
     if (draw) renderer.render(world.scene, world.camera);
   }
@@ -280,7 +293,7 @@ async function main() {
       clear() { sim.clearWorld(); return true; },
       place(kind: ObKind, lane: number, at: number, cars = 1) {
         const d0 = ahead(at);
-        const len = kind === 'train' ? trainLength(cars) : OB[kind].depth;
+        const len = kind === 'train' ? trainLength(cars) : kind === 'mtrain' ? trainLength(cars) / (1 + MOVER.ratio) : OB[kind].depth;
         return sim.addOb({ kind, lane, d0, d1: d0 + len, cars }).id;
       },
       coin(lane: number, at: number, y = 0.85) { sim.addCoin(lane, ahead(at), y); return true; },
@@ -302,7 +315,7 @@ async function main() {
         sim.speedOverride = 0;
         sim.reset(seedN, false);
         while (sim.track.frontier < length + 50) sim.track.ensure(length + 50);
-        const specs: Spec[] = sim.obs.map((o) => ({ kind: o.kind, lane: o.lane, d0: o.d0, d1: o.d1 }));
+        const specs: Spec[] = sim.obs.map((o) => Sim.specOf(o));
         const res = solve(specs, 0, sim.track.frontier, [1], speedAt, true, 1);
         if (!res.path) return { ok: false, reason: 'no path' };
         state = 'start';
@@ -335,14 +348,14 @@ async function main() {
         s2.noSpawn = true;
         s2.reset(seedN, false);
         while (s2.track.frontier < length) s2.track.ensure(length);
-        const specs: Spec[] = s2.obs.map((o) => ({ kind: o.kind, lane: o.lane, d0: o.d0, d1: o.d1, cars: o.cars }));
+        const specs: Spec[] = s2.obs.map((o) => Sim.specOf(o));
         const res = solve(specs, 0, s2.track.frontier, [1], speedAt, false);
         const kinds: Record<string, number> = {};
         for (const o of specs) kinds[o.kind] = (kinds[o.kind] || 0) + 1;
         // barriers in one lane never closer together than a jump takes
         let tight = 0;
         for (let l = 0; l < 3; l++) {
-          const b = specs.filter((x) => x.lane === l && x.kind !== 'train' && x.kind !== 'ramp').sort((a, c) => a.d0 - c.d0);
+          const b = specs.filter((x) => x.lane === l && x.kind !== 'train' && x.kind !== 'ramp' && x.kind !== 'mtrain').sort((a, c) => a.d0 - c.d0);
           for (let i = 1; i < b.length; i++) if (b[i].d0 - b[i - 1].d1 < speedAt(b[i].d0) * 0.7) tight++;
         }
         return { ok: res.ok, failAt: Math.round(res.failAt), near: res.ok ? [] : specs.filter((x) => x.d1 > res.failAt - 30 && x.d0 < res.failAt + 15).map((x) => `${x.kind}:${x.lane}:${x.d0.toFixed(1)}-${x.d1.toFixed(1)}`), length: Math.round(s2.track.frontier), obstacles: specs.length, kinds, chunks: s2.track.chunks, fallbacks: s2.track.failures, tight, coins: s2.coinList.length, powers: s2.powers.length };

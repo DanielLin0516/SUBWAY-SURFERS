@@ -1,6 +1,6 @@
 // Endless map: built in chunks of ~100 m. Every chunk is checked with a path search before it is used,
 // so there is always a way through without power-ups. Coins are laid along that way.
-import { LANE_COUNT, OB, PLAYER, levelAt, speedAt, trainLength, CAR_LEN, CAR_GAP } from '../config';
+import { LANE_COUNT, OB, PLAYER, levelAt, speedAt, trainLength, CAR_LEN, CAR_GAP, MOVER } from '../config';
 import type { ObKind, PowerKind, Hint } from './types';
 import { Rng } from './rng';
 
@@ -34,12 +34,15 @@ export function solve(specs: Spec[], start: number, end: number, startLanes: num
   const ramp = new Float32Array(n * L).fill(-1); // distance into a ramp, -1 if none
   const walkTrain = new Uint8Array(n * L); // a train top here
   for (const s of specs) {
-    if (s.kind !== 'train' && s.kind !== 'ramp') continue;
+    if (s.kind !== 'train' && s.kind !== 'ramp' && s.kind !== 'mtrain') continue;
     const i0 = Math.max(0, Math.floor((s.d0 - start) / STEP));
     const i1 = Math.min(n - 1, Math.ceil((s.d1 - start) / STEP));
     for (let i = i0; i <= i1; i++) {
       const d = start + i * STEP;
-      if (s.kind === 'train') {
+      if (s.kind === 'mtrain') {
+        // only the span where it is beside the runner; it can't be stood on
+        if (d >= s.d0 - PLAYER.halfD && d <= s.d1 + PLAYER.halfD) body[i * L + s.lane] = 1;
+      } else if (s.kind === 'train') {
         if (d >= s.d0 - PLAYER.halfD && d <= s.d1 + PLAYER.halfD) body[i * L + s.lane] = 1;
         if (d >= s.d0 && d <= s.d1) walkTrain[i * L + s.lane] = 1;
       } else if (d >= s.d0 && d <= s.d1) ramp[i * L + s.lane] = d - s.d0;
@@ -146,7 +149,7 @@ export interface TrackSink {
   power(kind: PowerKind, lane: number, d: number, y: number): void;
 }
 
-type Pattern = 'none' | 'b1' | 'b2' | 'b3' | 't1' | 't2' | 't3' | 'tb';
+type Pattern = 'none' | 'b1' | 'b2' | 'b3' | 't1' | 't2' | 't3' | 'tb' | 'mt';
 
 export class Track {
   rng: Rng;
@@ -253,11 +256,20 @@ export class Track {
       busy[l] = t1 + v * 0.8;
       return true;
     };
+    const mover = (l: number, at: number, maxCars: number) => {
+      // the lane must be clear from a little before the meeting point to where the train waits
+      if (busy[l] > at - 10) return false;
+      const cars = r.int(1, Math.min(3, maxCars));
+      const len = trainLength(cars);
+      specs.push({ kind: 'mtrain', lane: l, d0: at, d1: at + len / (1 + MOVER.ratio), cars, variant: r.int(0, 2) });
+      busy[l] = at + MOVER.ratio * MOVER.trigger + len + 4;
+      return true;
+    };
     const lanes = [0, 1, 2];
     while (d < end - 12) {
       const L = lvl;
       const w: Record<Pattern, number> = simple
-        ? { none: 0.4, b1: 0.4, b2: 0, b3: 0, t1: 0.2, t2: 0, t3: 0, tb: 0 }
+        ? { none: 0.4, b1: 0.4, b2: 0, b3: 0, t1: 0.2, t2: 0, t3: 0, tb: 0, mt: 0 }
         : {
             none: 0.14,
             b1: 0.46 - 0.3 * L,
@@ -267,6 +279,7 @@ export class Track {
             t2: 0.05 + 0.22 * L,
             t3: Math.max(0, L - 0.4) * 0.45,
             tb: Math.max(0, L - 0.2) * 0.45,
+            mt: L < 0.12 ? 0 : 0.06 + 0.22 * L,
           };
       const p = r.weighted(w);
       const shuffled = lanes.slice().sort(() => r.next() - 0.5);
@@ -282,6 +295,16 @@ export class Track {
         case 'b3': {
           const k = p === 'b2' ? 2 : 3;
           for (const l of shuffled.slice(0, k)) if (free(l, d)) barrier(l, d);
+          break;
+        }
+        case 'mt': {
+          const l = shuffled.find((x) => free(x, d - 10));
+          if (l !== undefined) {
+            mover(l, d, maxCars);
+            // sometimes something to deal with in another lane too
+            const o2 = shuffled.find((x) => x !== l && free(x, d));
+            if (o2 !== undefined && r.chance(0.5 * L)) barrier(o2, d + r.range(9, 14)); // not where you dodge to at the last moment
+          }
           break;
         }
         case 't1': {
@@ -333,6 +356,8 @@ export class Track {
         y = s.kind === 'train' ? OB.train.yt + 0.85 : (OB.ramp.yt * (d - s.d0)) / (s.d1 - s.d0) + 0.85;
       } else if (!top && (s.kind === 'train' || s.kind === 'ramp') && d >= s.d0 - 1 && d <= s.d1 + 1) {
         return; // never inside a train
+      } else if (s.kind === 'mtrain' && d >= s.d0 - 2 && d <= s.d0 + MOVER.ratio * MOVER.trigger + 20) {
+        return; // the moving train will sweep through here
       } else if (s.kind === 'low' || s.kind === 'hurdle') {
         const reach = 5;
         const t = (d - (s.d0 - reach)) / (s.d1 - s.d0 + reach * 2);
@@ -356,7 +381,7 @@ export class Track {
       const i = Math.min(path.length - 1, Math.round((d - start) / STEP));
       const pt = path[i];
       if (pt.top) continue;
-      const clear = specs.every((s) => s.lane !== pt.lane || d < s.d0 - 6 || d > s.d1 + 6);
+      const clear = specs.every((s) => s.lane !== pt.lane || d < s.d0 - 6 || d > (s.kind === 'mtrain' ? s.d0 + MOVER.ratio * MOVER.trigger + 20 : s.d1 + 6));
       if (clear) {
         this.sink.power(kind, pt.lane, d, 1.1);
         this.nextPower = d + this.rng.range(380, 650);

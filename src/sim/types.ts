@@ -1,4 +1,4 @@
-export type ObKind = 'low' | 'hurdle' | 'overhead' | 'train' | 'ramp';
+export type ObKind = 'low' | 'hurdle' | 'overhead' | 'train' | 'ramp' | 'mtrain';
 export type PowerKind = 'magnet' | 'shoes' | 'double';
 export type Hint = 'jump' | 'slide' | 'lane' | 'ramp';
 
@@ -16,6 +16,10 @@ export interface Ob {
   variant: number;
   hint: Hint | null;
   hinted: boolean;
+  meet: number; // moving trains: runner distance where they meet
+  len: number; // moving trains: real length
+  pd0: number; // where it was last step (moving trains move, so a hit must be judged against that)
+  pd1: number;
 }
 
 export interface Coin {

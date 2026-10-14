@@ -103,6 +103,33 @@ export class Audio {
   click() { this.tone(660, 0.05, 'square', 0.06); }
   level() { [660, 880].forEach((f, i) => this.tone(f, 0.12, 'triangle', 0.1, undefined, i * 0.08)); }
 
+  // ------------------------------------------------ moving trains: horn + rumble that grows as they come
+  private rumbleGain: GainNode | null = null;
+  horn() {
+    // two-note horn
+    [[311, 0], [262, 0.32]].forEach(([f, w]) => {
+      this.tone(f, 0.42, 'sawtooth', 0.09, undefined, w);
+      this.tone(f * 1.5, 0.42, 'square', 0.04, undefined, w);
+    });
+  }
+  rumble(level: number) {
+    const c = this.ctx;
+    if (!c) return;
+    if (!this.rumbleGain) {
+      const s = c.createBufferSource();
+      s.buffer = this.noise;
+      s.loop = true;
+      const f = c.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = 160;
+      this.rumbleGain = c.createGain();
+      this.rumbleGain.gain.value = 0;
+      s.connect(f).connect(this.rumbleGain).connect(this.master);
+      s.start();
+    }
+    this.rumbleGain.gain.setTargetAtTime(Math.max(0, Math.min(1, level)) * 0.9, c.currentTime, 0.08);
+  }
+
   // ------------------------------------------------ background beat (look-ahead scheduler)
   startMusic() {
     if (!this.ctx || this.musicOn) return;

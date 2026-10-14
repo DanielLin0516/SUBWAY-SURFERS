@@ -9,7 +9,7 @@ import { PlayerView } from './player';
 import { trackTexture, pavingTexture, groundTexture, skyTexture, glowTexture, powerTexture, rampTexture, HORIZON } from './textures';
 import { LANE_W, laneX, CAR_LEN, CAR_GAP, VIEW_AHEAD, OB } from '../config';
 import type { Sim } from '../sim/sim';
-import type { SimEvent, PowerKind } from '../sim/types';
+import type { SimEvent, PowerKind, Ob } from '../sim/types';
 import { Rng } from '../sim/rng';
 
 const m4 = new THREE.Matrix4();
@@ -22,6 +22,9 @@ const TRAIN_TINTS = [new THREE.Color(1, 1, 1), new THREE.Color(0.7, 0.85, 1), ne
 const POWER_COLORS: Record<PowerKind, THREE.Color> = {
   magnet: new THREE.Color('#ff5a64'), shoes: new THREE.Color('#3ee08a'), double: new THREE.Color('#ffc23d'),
 };
+const LIGHT = new THREE.Color(1.0, 0.92, 0.65);
+const LIGHT_RED = new THREE.Color(1.0, 0.25, 0.2);
+const FLAT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
 const GROUND_LEN = 300;
 const SIDEWALK_IN = 3.9; // inner edge of the sidewalk from the track centre
 const SIDEWALK_OUT = 7.4;
@@ -232,15 +235,17 @@ export class World {
     for (const t of this.scrollTex) t.offset.y = (pd / (GROUND_LEN / t.repeat.y)) % 1;
     // obstacles
     for (const k in this.pools) this.pools[k].begin();
+    const movers: Ob[] = [];
     for (const o of sim.obs) {
       if (o.d0 > pd + VIEW_AHEAD || o.d1 < pd - 12) continue;
       const x = laneX(o.lane);
-      if (o.kind === 'train') {
+      if (o.kind === 'train' || o.kind === 'mtrain') {
         for (let c = 0; c < o.cars; c++) {
           const dc = o.d0 + c * (CAR_LEN + CAR_GAP) + CAR_LEN / 2;
           m4.makeTranslation(x, 0, zOf(dc));
           this.pools.train.add(m4, TRAIN_TINTS[o.variant % 3]);
         }
+        if (o.kind === 'mtrain') movers.push(o);
       } else {
         m4.makeTranslation(x, 0, zOf((o.d0 + o.d1) / 2));
         this.pools[o.kind].add(m4);
@@ -273,6 +278,25 @@ export class World {
       this.halos.add(m4, POWER_COLORS[p.kind]);
     }
     for (const k in this.powerCards) this.powerCards[k as PowerKind].end();
+    // moving trains: headlights that blink, and a band of light thrown on the track ahead of them
+    // (parked trains have none, so the ones that will move can be told apart from far away)
+    for (const o of movers) {
+      const x = laneX(o.lane);
+      const z = zOf(o.d0) + 0.08;
+      const blink = 0.75 + 0.25 * Math.sin(this.time * 14 + o.id);
+      const far = Math.max(0, o.d0 - pd);
+      const size = 1.6 + far * 0.035; // stays readable from far away (glows are not fogged)
+      for (const side of [-1, 1]) {
+        const on = side < 0 ? blink : 1.75 - blink;
+        m4.compose(v.set(x + side * 0.72, 0.95, z), camQ, sc.set(size, size, size));
+        this.halos.add(m4, LIGHT.clone().multiplyScalar(on));
+      }
+      m4.compose(v.set(x, 2.9, z), camQ, sc.set(1.1, 1.1, 1.1));
+      this.halos.add(m4, LIGHT_RED.clone().multiplyScalar(blink));
+      const len = 18;
+      m4.compose(v.set(x, 0.06, z + len / 2), FLAT, sc.set(2.2, len, 1));
+      this.halos.add(m4, LIGHT.clone().multiplyScalar(0.35 + 0.15 * blink));
+    }
     this.coins.end();
     this.halos.end();
     // poles

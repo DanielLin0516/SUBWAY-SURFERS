@@ -17,6 +17,9 @@ export async function parseGLB(buf: ArrayBuffer): Promise<GLTF> {
         map: old.map,
         color: old.map ? new THREE.Color(0xffffff) : old.color,
         alphaTest: cut ? 0.5 : 0,
+        // keep the glTF doubleSided flag: the train is a thin shell whose front, roof and right side face
+        // inward, so with FrontSide they are culled and only one wall is left standing
+        side: old.side,
       });
       nm.name = old.name;
       if (old.map) old.map.anisotropy = 4;

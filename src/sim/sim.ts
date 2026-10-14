@@ -3,9 +3,11 @@
 // and the runner is a small box. Plain interval checks, so the result is the same every time.
 import {
   PLAYER, GRAVITY, JUMP_V, SUPER_JUMP_V, OB, laneX, speedAt, POWER_TIME, MAGNET_RANGE, VIEW_AHEAD, LANE_COUNT,
+  trainLength, moverFront, moverSpan,
 } from '../config';
 import type { Ob, Coin, Power, SimEvent, ObKind, PowerKind, Hint } from './types';
 import { Track, type Spec } from './track';
+export type { Spec };
 
 const MAX_STEP = 1 / 120;
 const easeOut = (t: number) => 1 - (1 - t) * (1 - t) * (1 - t);
@@ -93,8 +95,16 @@ export class Sim {
     const shape = OB[s.kind];
     Object.assign(o, {
       id: this.nextId++, kind: s.kind, lane: s.lane, d0: s.d0, d1: s.d1, yb: shape.yb, yt: shape.yt, halfW: shape.halfW,
-      walk: shape.walk, cars: s.cars || 1, variant: s.variant || 0, hint: s.hint || null, hinted: false,
+      walk: shape.walk, cars: s.cars || 1, variant: s.variant || 0, hint: s.hint || null, hinted: false, meet: 0, len: 0,
+      pd0: s.d0, pd1: s.d1,
     });
+    if (s.kind === 'mtrain') {
+      // the spec gives the meeting span (as the path search sees it); the train itself is drawn and hit where it is
+      o.meet = s.d0;
+      o.len = trainLength(o.cars);
+      this.placeMover(o);
+      o.pd0 = o.d0; o.pd1 = o.d1;
+    }
     this.obs.push(o);
     return o;
   }
@@ -110,6 +120,17 @@ export class Sim {
     Object.assign(p, { id: this.nextId++, kind, lane, d, y });
     this.powers.push(p);
   }
+  private placeMover(o: Ob) {
+    o.d0 = moverFront(o.meet, this.d);
+    o.d1 = o.d0 + o.len;
+  }
+
+  /** The obstacle as the path search sees it (moving trains: the span of runner distances where they meet). */
+  static specOf(o: Ob): Spec {
+    if (o.kind === 'mtrain') return { kind: 'mtrain', lane: o.lane, d0: o.meet, d1: o.meet + moverSpan(o.len), cars: o.cars };
+    return { kind: o.kind, lane: o.lane, d0: o.d0, d1: o.d1, cars: o.cars };
+  }
+
   clearWorld() {
     for (const o of this.obs) this.freeObs.push(o);
     for (const c of this.coinList) this.freeCoins.push(c);
@@ -235,6 +256,10 @@ export class Sim {
       this.y += this.vy * dt;
       this.peakY = Math.max(this.peakY, this.y);
     }
+    for (const o of this.obs) {
+      o.pd0 = o.d0; o.pd1 = o.d1;
+      if (o.kind === 'mtrain') this.placeMover(o);
+    }
     this.groundY = this.supportAt(this.x, this.d, this.grounded ? this.y : Math.max(this.y, prevY));
     if (this.grounded) {
       if (this.groundY < this.y - 0.05) {
@@ -305,7 +330,7 @@ export class Sim {
       if (o.id === this.ignoreId && this.ignoreT > 0) continue;
       if (!this.overlaps(o, this.x, this.y, this.d, h)) continue;
       const dx = Math.abs(this.x - laneX(o.lane));
-      const dBefore = !(pd + PLAYER.halfD <= o.d0 || pd - PLAYER.halfD >= o.d1);
+      const dBefore = !(pd + PLAYER.halfD <= o.pd0 || pd - PLAYER.halfD >= o.pd1);
       const xBefore = Math.abs(px - laneX(o.lane)) < o.halfW + PLAYER.halfW;
       if (!dBefore) {
         // ran into its front
@@ -330,12 +355,17 @@ export class Sim {
         return;
       }
       if (!xBefore) {
-        // came in from the side while changing lanes
+        // came in from the side while changing lanes; the low part of a ramp can be stepped onto
+        if (o.kind === 'ramp' && this.topAt(o, this.d) - this.y <= 1.0) {
+          this.standOn(o);
+          continue;
+        }
         this.bounce(o);
         return;
       }
-      // came in from above or below
-      const wasOver = py >= this.topAt(o, pd) - 0.05;
+      // came in from above or below. Over a ramp the surface rises under the runner (a jump on the ramp
+      // can be overtaken by the slope): that is landing, never a hit
+      const wasOver = py >= this.topAt(o, pd) - 0.05 || o.kind === 'ramp';
       if (wasOver) {
         if (o.walk) {
           this.y = this.topAt(o, this.d);
@@ -354,6 +384,12 @@ export class Sim {
       this.bounce(o);
       return;
     }
+  }
+
+  private standOn(o: Ob) {
+    this.y = this.topAt(o, this.d);
+    this.groundY = this.y;
+    if (!this.grounded) this.land();
   }
 
   private bounce(o: Ob) {

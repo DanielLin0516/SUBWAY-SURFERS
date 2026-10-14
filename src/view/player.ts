@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { Sim } from '../sim/sim';
 import type { SimEvent } from '../sim/types';
-import { PLAYER, JUMP_V, SUPER_JUMP_V, GRAVITY } from '../config';
+import { PLAYER, JUMP_V, SUPER_JUMP_V, GRAVITY, laneX } from '../config';
 
 type Clip = 'idle' | 'run' | 'jump' | 'jumpup' | 'fall' | 'roll' | 'die' | 'runlookback';
 
@@ -14,6 +14,9 @@ export class PlayerView {
   actions = {} as Record<Clip, THREE.AnimationAction>;
   current: Clip | null = null;
   private lean = 0;
+  private leanV = 0;
+  private yaw = 0;
+  private yawV = 0;
   private squash = 0;
   private stumbleT = 0;
   private menuT = 0;
@@ -48,6 +51,17 @@ export class PlayerView {
     }
   }
 
+  private spring(dt: number, target: number, k: 'lean' | 'yaw', kv: 'leanV' | 'yawV', stiff: number, damp: number) {
+    const c = 2 * Math.sqrt(stiff) * damp;
+    let t = Math.min(dt, 0.05);
+    while (t > 0) {
+      const h = Math.min(t, 1 / 120);
+      this[kv] += (stiff * (target - this[k]) - c * this[kv]) * h;
+      this[k] += this[kv] * h;
+      t -= h;
+    }
+  }
+
   play(name: Clip, fade = 0.12, timeScale = 1) {
     const next = this.actions[name];
     if (!next) return;
@@ -63,6 +77,9 @@ export class PlayerView {
     this.mixer.stopAllAction();
     this.current = null;
     this.lean = 0;
+    this.leanV = 0;
+    this.yaw = 0;
+    this.yawV = 0;
     this.squash = 0;
     this.stumbleT = 0;
     this.root.scale.set(1, 1, 1);
@@ -106,13 +123,17 @@ export class PlayerView {
       // ended a slide early by jumping, or a jump clip finished in the air
       if (this.current === 'roll' && !sim.sliding && sim.grounded) this.play('run', 0.1, 0.9 + sim.speed / 22);
     }
-    // lean into lane changes
-    const target = sim.laneT < 1 ? Math.sign(sim.x - sim.fromX) * Math.sin(Math.PI * sim.laneT) : 0;
-    this.lean += (target - this.lean) * Math.min(1, dt * 18);
+    // lane changes: lean (roll) and turn toward where we are going (yaw), both on damped springs, so a
+    // second change mid-way turns straight from the current angle to the new side
+    const toGo = laneX(sim.lane) - sim.x;
+    const dir = sim.alive && Math.abs(toGo) > 0.35 ? Math.sign(toGo) : 0;
+    const air = sim.grounded ? 1 : 0.6;
+    this.spring(dt, dir * air, 'lean', 'leanV', 700, 0.7);
+    this.spring(dt, dir * 0.44 * air, 'yaw', 'yawV', 1000, 0.62); // peaks near 20 degrees in a 0.15 s lane change
     this.squash = Math.max(0, this.squash - dt * 1.4);
     this.root.position.set(sim.x, sim.y, 0);
-    this.root.rotation.z = -this.lean * 0.2;
-    this.model.rotation.y = Math.PI - this.lean * 0.35;
+    this.root.rotation.z = -this.lean * 0.18;
+    this.model.rotation.y = Math.PI - this.yaw;
     const sq = this.squash;
     this.root.scale.set(1 + sq * 0.5, 1 - sq, 1 + sq * 0.5);
     this.mixer.update(dt);
