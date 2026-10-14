@@ -1,13 +1,163 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <link rel="icon" href="/favicon.ico">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SUBWAYS SURFERS</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#2f6fb8" />
+<meta name="description" content="A three-lane endless runner made with three.js" />
+<link rel="icon" href="./favicon.ico" />
+<title>Subway Run</title>
+<!--BOOT-MANIFEST-->
+<style>
+:root{--ink:#1d2433;--sky:#3f8fe0;--gold:#ffc23d;--red:#ff5a64;--panel:rgba(18,26,44,.78);--line:rgba(255,255,255,.14)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#2f6fb8;color:#fff;font-family:system-ui,-apple-system,"PingFang TC","PingFang SC","Microsoft JhengHei","Microsoft YaHei",sans-serif;overscroll-behavior:none;touch-action:none;user-select:none;-webkit-user-select:none}
+#game{position:fixed;inset:0;display:block;width:100vw;height:100vh}
+#ui{position:fixed;inset:0;touch-action:none}
+/* loading screen: plain HTML+CSS, visible before any script arrives */
+#loader{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:linear-gradient(#3f8fe0,#8cc4f0 60%,#ffe2bf);transition:opacity .35s}
+#loader.out{opacity:0;pointer-events:none}
+#loader h1{margin:0;font-size:clamp(30px,7vw,54px);font-weight:900;letter-spacing:.04em;text-shadow:0 4px 0 rgba(0,0,0,.18)}
+.track-ico{width:120px;height:46px;position:relative}
+.track-ico i{position:absolute;bottom:0;width:120px;height:6px;border-radius:3px;background:rgba(255,255,255,.55)}
+.track-ico b{position:absolute;bottom:8px;left:0;width:34px;height:34px;border-radius:9px;background:var(--gold);box-shadow:0 3px 0 rgba(0,0,0,.2);animation:hop .7s ease-in-out infinite alternate}
+@keyframes hop{0%{transform:translate(0,0)}50%{transform:translate(43px,-12px)}100%{transform:translate(86px,0)}}
+.bar{width:min(320px,74vw);height:12px;border-radius:6px;background:rgba(0,0,0,.18);overflow:hidden}
+.bar i{display:block;height:100%;width:100%;background:#fff;border-radius:6px;transform:scaleX(0);transform-origin:left;transition:transform .15s linear}
+#ld-text{font-size:15px;opacity:.92;font-variant-numeric:tabular-nums;min-height:1.2em}
+/* HUD */
+.hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .2s}
+.hud.on{opacity:1}
+.hud-left{position:absolute;left:calc(12px + env(safe-area-inset-left));top:calc(12px + env(safe-area-inset-top));display:flex;gap:8px;pointer-events:auto}
+.icon-btn{width:44px;height:44px;border-radius:14px;border:0;background:var(--panel);color:#fff;display:grid;place-items:center;cursor:pointer}
+.icon-btn svg{width:22px;height:22px;fill:currentColor}
+.hud-right{position:absolute;right:calc(12px + env(safe-area-inset-right));top:calc(10px + env(safe-area-inset-top));text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.score{font-size:clamp(24px,5.4vw,34px);font-weight:900;font-variant-numeric:tabular-nums;letter-spacing:.04em;text-shadow:0 2px 0 rgba(0,0,0,.35)}
+.hud-row{display:flex;gap:8px;align-items:center}
+.mult,.coins{background:var(--panel);border-radius:12px;padding:5px 10px;font-weight:800;font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:6px}
+.mult.hot{background:var(--red)}
+.coins.pop{animation:pop .22s ease-out}
+@keyframes pop{50%{transform:scale(1.18)}}
+.coin-ico{width:16px;height:16px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fff4b8,var(--gold) 55%,#d68a00);box-shadow:0 0 8px rgba(255,194,61,.8)}
+.powers{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.pw{position:relative;display:flex;align-items:center;gap:8px;background:var(--panel);border-radius:12px;padding:5px 10px 8px;font-size:13px;font-weight:700;overflow:hidden;min-width:120px}
+.pw i{font-style:normal;width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-size:12px;font-weight:900}
+.pw.magnet i{background:var(--red)}.pw.shoes i{background:#2fb36b}.pw.double i{background:#f2a516}
+.pw em{position:absolute;left:0;bottom:0;height:3px;width:100%;background:#fff;transform-origin:left}
+.hint{position:absolute;left:50%;top:calc(17% + env(safe-area-inset-top));transform:translate(-50%,10px);background:var(--panel);padding:12px 20px;border-radius:16px;font-size:clamp(17px,4.4vw,22px);font-weight:800;opacity:0;transition:opacity .2s,transform .2s;white-space:nowrap}
+.hint.on{opacity:1;transform:translate(-50%,0)}
+.toast{position:absolute;left:50%;top:30%;transform:translateX(-50%) scale(.9);font-size:clamp(18px,4.6vw,26px);font-weight:900;text-shadow:0 3px 0 rgba(0,0,0,.3);opacity:0;transition:opacity .18s,transform .18s;text-align:center;width:90%}
+.toast.on{opacity:1;transform:translateX(-50%) scale(1)}
+.flash{position:absolute;inset:0;pointer-events:none;opacity:0}
+.flash.hit{background:radial-gradient(ellipse at center,transparent 45%,rgba(255,60,60,.55));animation:fl .45s ease-out}
+.flash.crash{background:radial-gradient(ellipse at center,rgba(255,255,255,.4),rgba(255,40,40,.65));animation:fl .7s ease-out}
+.flash.power{background:radial-gradient(ellipse at center,rgba(255,255,255,.35),transparent 70%);animation:fl .35s ease-out}
+@keyframes fl{0%{opacity:1}100%{opacity:0}}
+/* screens */
+.screen{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:16px}
+.screen.on{display:flex}
+.screen.start{align-items:flex-end;padding-bottom:calc(6vh + env(safe-area-inset-bottom))}
+.screen.pause,.screen.over{background:rgba(10,16,30,.45);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.panel{width:min(420px,100%);background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:22px 22px 18px;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:stretch;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.panel h1{margin:0;font-size:clamp(32px,8vw,46px);font-weight:900;letter-spacing:.03em}
+.panel h2{margin:0;font-size:28px;font-weight:900}
+.tag{margin:-6px 0 0;opacity:.85}
+.stats,.result{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stats div,.result div{background:rgba(255,255,255,.08);border-radius:14px;padding:8px}
+.stats small,.result small{display:block;opacity:.75;font-size:12px}
+.stats b,.result b{font-size:22px;font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit}
+.big{border:0;border-radius:16px;padding:14px;font-size:20px;font-weight:900;background:linear-gradient(#ffd25e,#f2a516);color:#3a2500;box-shadow:0 4px 0 #b97700;cursor:pointer}
+.big:active{transform:translateY(2px);box-shadow:0 2px 0 #b97700}
+.ghost{border:1px solid var(--line);border-radius:14px;padding:11px;font-size:16px;font-weight:700;background:transparent;cursor:pointer}
+.ctrl{margin:0;font-size:13px;opacity:.8;line-height:1.5}
+.row{display:flex;gap:8px;justify-content:center}
+.chip{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:rgba(255,255,255,.06);border-radius:999px;padding:7px 14px;font-size:14px;cursor:pointer}
+.chip svg{width:18px;height:18px;fill:currentColor}
+.badge{display:none;align-self:center;background:var(--red);border-radius:999px;padding:4px 14px;font-weight:900;animation:pop .5s ease-out 2}
+.badge.on{display:block}
+button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+@media (min-aspect-ratio:5/4){
+  .screen.start{align-items:center;justify-content:flex-end;padding:16px calc(5vw + env(safe-area-inset-right)) 16px 16px}
+  .screen.start .panel{width:min(400px,44vw)}
+}
+@media (orientation:landscape) and (max-height:500px){
+  .panel{padding:14px 18px;gap:8px;width:min(560px,100%)}
+  .panel h1{font-size:30px}
+  .screen.start{align-items:center;justify-content:flex-end;padding-right:calc(4vw + env(safe-area-inset-right))}
+  .screen.start .panel{width:min(380px,48vw)}
+  .stats b,.result b{font-size:18px}
+  .big{padding:10px;font-size:18px}
+}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui"></div>
+<div id="loader">
+  <h1 id="ld-title">Subway Run</h1>
+  <div class="track-ico"><i></i><b></b></div>
+  <div class="bar"><i id="ld-bar"></i></div>
+  <div id="ld-text">0%</div>
+</div>
+<script>
+/* Boot: starts every download at once (the game script and the first-screen models), counts bytes as they
+   arrive, and draws real progress. Sizes come from a manifest written at build time. */
+(function () {
+  var M = window.__MANIFEST || null;
+  var lang = 'en', saved = null;
+  try { saved = JSON.parse(localStorage.getItem('subway.lang')); } catch (e) {}
+  if (saved === 'zh-TW' || saved === 'zh-CN' || saved === 'en') lang = saved;
+  else {
+    var ls = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en']);
+    for (var i = 0; i < ls.length; i++) { var l = String(ls[i]).toLowerCase();
+      if (l.indexOf('zh') === 0) { lang = /hant|tw|hk|mo/.test(l) ? 'zh-TW' : 'zh-CN'; break; } if (l.indexOf('en') === 0) break; }
+  }
+  var T = { 'zh-TW': ['地鐵跑酷', '下載中', '準備中…'], 'zh-CN': ['地铁跑酷', '下载中', '准备中…'], en: ['Subway Run', 'Downloading', 'Getting ready…'] }[lang];
+  document.getElementById('ld-title').textContent = T[0];
+  document.title = T[0];
+  var bar = document.getElementById('ld-bar'), txt = document.getElementById('ld-text');
+  var shown = 0, label = T[1];
+  function set(p, l) {
+    if (l) label = l;
+    if (p > shown) shown = Math.min(1, p);
+    bar.style.transform = 'scaleX(' + shown + ')';
+    txt.textContent = label + ' ' + Math.floor(shown * 100) + '%';
+  }
+  set(0);
+  var total = M ? M.js[1] + M.core : 0, got = { js: 0, core: 0 };
+  function tick() { if (total) set(0.9 * (got.js + got.core) / total); }
+  function stream(url, key) {
+    return fetch(url).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + url);
+      if (!r.body || !r.body.getReader) return r.arrayBuffer().then(function (b) { got[key] = b.byteLength; tick(); return b; });
+      var rd = r.body.getReader(), parts = [], n = 0;
+      function pump() {
+        return rd.read().then(function (x) {
+          if (x.done) { var all = new Uint8Array(n), o = 0; for (var i = 0; i < parts.length; i++) { all.set(parts[i], o); o += parts[i].length; } return all.buffer; }
+          parts.push(x.value); n += x.value.length; got[key] = n; tick(); return pump();
+        });
+      }
+      return pump();
+    });
+  }
+  function fail(msg) { txt.textContent = msg || 'Error'; bar.style.background = '#ff5a64'; }
+  window.__boot = {
+    set: set,
+    core: stream('assets/core.glb', 'core'),
+    done: function () { set(1); var e = document.getElementById('loader'); e.className = 'out'; setTimeout(function () { e.remove(); }, 400); },
+    fail: fail
+  };
+  if (M) stream(M.js[0], 'js').then(function (b) {
+    var s = document.createElement('script');
+    s.type = 'module';
+    s.src = URL.createObjectURL(new Blob([b], { type: 'text/javascript' }));
+    s.onerror = function () { fail('Error'); };
+    document.body.appendChild(s);
+  }).catch(function (e) { fail(String(e)); });
+  window.__boot.core.catch(function (e) { fail(String(e)); });
+})();
+</script>
+<script type="module" src="/src/main.ts"></script>
+</body>
 </html>
