@@ -179,6 +179,14 @@ export class World {
       this.houseSize.push({ len: size.x, depth: size.z });
     }
   }
+  /** Houses use the same shader as the barriers, so only their textures need uploading; no full warm-up
+   *  (that would disturb a run already in progress). */
+  warmScenery(renderer: THREE.WebGLRenderer) {
+    for (const h of this.houses) for (const p of h.parts) {
+      const m = p.mesh.material as THREE.MeshLambertMaterial;
+      if (m.map) renderer.initTexture(m.map);
+    }
+  }
   get hasScenery() {
     return this.houses.length > 0;
   }

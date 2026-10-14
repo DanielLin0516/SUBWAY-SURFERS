@@ -239,7 +239,7 @@ async function main() {
     .then(parseGLB)
     .then((g) => {
       world.addScenery(g);
-      world.warm(renderer);
+      world.warmScenery(renderer);
       return true;
     })
     .catch((e) => { console.warn('scenery', e); return false; });
