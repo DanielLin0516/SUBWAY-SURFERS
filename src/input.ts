@@ -1,5 +1,4 @@
-// Keyboard and swipe input. A swipe fires as soon as the finger has moved far enough (not on release),
-// and the same touch can swipe again in another direction.
+// Keyboard and swipe input.
 export type Action = 'left' | 'right' | 'up' | 'down' | 'pause' | 'confirm' | 'mute';
 
 export function bindInput(target: HTMLElement, on: (a: Action) => void, canSwipe: () => boolean) {
@@ -16,32 +15,24 @@ export function bindInput(target: HTMLElement, on: (a: Action) => void, canSwipe
     if (e.repeat && a !== 'left' && a !== 'right') return;
     on(a);
   });
-  let id = -1, sx = 0, sy = 0, t0 = 0;
-  const dist = () => Math.max(18, Math.min(window.innerWidth, window.innerHeight) * 0.045);
+  // A swipe is read when the finger lifts: from where it went down to where it came up, the longer axis
+  // decides the direction. One touch, one move; a touch that barely moves does nothing.
+  let id = -1, sx = 0, sy = 0;
+  const dist = () => Math.max(24, Math.min(window.innerWidth, window.innerHeight) * 0.05);
   target.addEventListener('pointerdown', (e) => {
     if (!canSwipe()) return;
     id = e.pointerId;
     sx = e.clientX;
     sy = e.clientY;
-    t0 = performance.now();
     try { target.setPointerCapture(e.pointerId); } catch { /* ignore */ }
   });
-  target.addEventListener('pointermove', (e) => {
+  target.addEventListener('pointerup', (e) => {
     if (e.pointerId !== id) return;
-    const dx = e.clientX - sx, dy = e.clientY - sy;
-    const D = dist();
+    id = -1;
+    const dx = e.clientX - sx, dy = e.clientY - sy, D = dist();
     if (Math.abs(dx) < D && Math.abs(dy) < D) return;
     if (Math.abs(dx) > Math.abs(dy)) on(dx > 0 ? 'right' : 'left');
     else on(dy > 0 ? 'down' : 'up');
-    // re-arm from here so one touch can make a second swipe
-    sx = e.clientX;
-    sy = e.clientY;
-    t0 = performance.now();
   });
-  const end = (e: PointerEvent) => {
-    if (e.pointerId === id) id = -1;
-    void t0;
-  };
-  target.addEventListener('pointerup', end);
-  target.addEventListener('pointercancel', end);
+  target.addEventListener('pointercancel', (e) => { if (e.pointerId === id) id = -1; });
 }
